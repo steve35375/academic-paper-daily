@@ -1,0 +1,9 @@
+# Optional manual journal impact-factor mapping.
+# Keys should match the journal/publication name returned by the source.
+# Example:
+#
+# "Advanced Materials": "29.4"
+# "Acta Materialia": "9.7"
+#
+# Leave empty to display "未配置" in emails.
+{}

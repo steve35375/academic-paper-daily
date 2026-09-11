@@ -1,0 +1,87 @@
+# Academic Paper Daily configuration
+# Secrets (SMTP password/API keys) should normally be supplied through
+# environment variables / GitHub Actions Secrets, not committed here.
+
+user_agent: "AcademicPaperDaily/1.0 (contact: your_email@example.com)"
+
+search:
+  # Rolling window. Default requested behavior: latest 24 hours.
+  hours: 24
+
+  # Alternative: explicit UTC ISO 8601 interval.
+  # start: "2026-09-10T00:00:00+00:00"
+  # end: "2026-09-11T00:00:00+00:00"
+
+  # Each item is a boolean expression. Multiple expressions are ORed at the
+  # application level: a paper matching ANY expression is retained.
+  #
+  # Examples:
+  #   '"amorphous alloy" AND ("machine learning" OR "data-driven")'
+  #   '("metal additive manufacturing" OR "3D printing") AND recycling AND NOT polymer'
+  queries:
+    - '"amorphous alloy" AND ("machine learning" OR "data-driven")'
+    - '"metallic glass" AND ("machine learning" OR "data-driven")'
+    - '"amorphous alloy" AND "artificial intelligence"'
+
+sources:
+  pubmed:
+    enabled: true
+    max_results: 50
+    # NCBI recommends identifying API requests with tool + email.
+    tool: "academic_paper_daily"
+    email: "your_email@example.com"
+    request_delay_seconds: 0.2
+
+  arxiv:
+    enabled: true
+    max_results: 50
+    request_delay_seconds: 3
+
+  openalex:
+    enabled: true
+    max_results: 50
+    # Optional; environment variable OPENALEX_MAILTO takes precedence.
+    mailto: "353751405@qq.com"
+
+# Path of persistent pushed-paper IDs.
+state:
+  sent_ids_file: "data/sent_ids.json"
+  max_entries: 100000
+
+# Optional manual mapping maintained by the user.
+# This shows JCR Impact Factor values in the email.
+impact_factor_file: "impact_factors.yaml"
+
+email:
+  # QQ example:
+  # smtp_host: "smtp.qq.com"
+  # smtp_port: 465
+  # security: "ssl"
+  #
+  # 163 example:
+  # smtp_host: "smtp.163.com"
+  # smtp_port: 465
+  # security: "ssl"
+  #
+  # Gmail example:
+  # smtp_host: "smtp.gmail.com"
+  # smtp_port: 465
+  # security: "ssl"
+  #
+  # Use an app password for providers that require/encourage it.
+  smtp_host: "smtp.qq.com"
+  smtp_port: 465
+  security: "ssl"
+
+  username: "353751405@qq.com"
+  from: "353751405@qq.com"
+  from_name: "每日学术文献推送"
+  to:
+    - "353751405@qq.com"
+
+  subject_prefix: "每日学术文献推送"
+  send_when_empty: true
+
+logging:
+  level: "INFO"
+  file: "logs/run.log"
