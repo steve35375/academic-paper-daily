@@ -48,6 +48,7 @@ sources:
 # Path of persistent pushed-paper IDs.
 state:
   sent_ids_file: "data/sent_ids.json"
+  runtime_state_file: "data/runtime_state.json"
   max_entries: 100000
 
 # Optional manual mapping maintained by the user.
