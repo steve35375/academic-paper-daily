@@ -1,37 +1,113 @@
 # 学术文献每日自动检索邮件推送系统
 
-一个可直接运行在 GitHub Actions 上的 Python 文献日报系统，默认每天北京时间 08:00 自动执行。
+一个基于 **Python + GitHub Actions** 的个人科研文献日报系统。
 
-## 功能
+系统每天自动检索 **PubMed、arXiv、OpenAlex**，根据配置的关键词和布尔逻辑筛选论文，利用 DOI / PMID / arXiv ID 持久化去重，并通过 QQ、163、Gmail 等 SMTP 邮箱发送 HTML 格式日报。
 
-- PubMed、arXiv、OpenAlex 三个数据库
-- 配置文件管理关键词和检索策略
+当前版本为 **V1.1**，已经加入 GitHub Actions 调度延迟容错和运行状态持久化，可以根据实际两次成功运行之间的间隔动态扩大检索窗口，降低定时任务延迟导致漏检的风险。
+
+---
+
+## 1. 当前功能
+
+### 文献检索
+
+- PubMed
+- arXiv
+- OpenAlex
+- 多数据库结果自动合并
 - 支持 `AND / OR / NOT / ()` 布尔表达式
-- 默认滚动检索最近 24 小时
-- DOI / PMID / arXiv ID 优先去重
-- `data/sent_ids.json` 持久化已推送记录
-- HTML 邮件：标题、作者、出版物、发表日期、影响因子、来源、摘要、原文链接
-- SMTP：QQ、163、Gmail 均可配置
-- GitHub Secrets 保存密码/API Key
-- GitHub Actions 每日 UTC 00:00 自动运行，同时支持手动运行
-- 日志输出到控制台和 `logs/run.log`
+- 支持多个独立检索式
+- 默认至少检索最近 24 小时
+- GitHub Actions 延迟时自动扩大检索窗口
+- 最大检索窗口可配置
 
-## 重要说明：影响因子
+### 去重
 
-PubMed、arXiv 和 OpenAlex 的公共元数据接口并不等同于 Clarivate JCR 的 Journal Impact Factor 数据源。因此本项目不会伪造或“猜测”影响因子。
+系统优先使用以下唯一标识进行去重：
 
-项目提供 `impact_factors.yaml`，由你手动维护：
+1. DOI
+2. PMID
+3. arXiv ID
+4. 数据库内部 UID
 
-```yaml
-"Advanced Materials": "29.4"
-"Acta Materialia": "9.7"
+持久化文件：
+
+```text
+data/sent_ids.json
 ```
 
-邮件中会显示匹配到的数值；未配置时显示“未配置”。
+### 运行状态
 
-这样做可以避免把 CiteScore、OpenAlex 指标或其他指标误标成 JCR Impact Factor。
+新增：
 
-## 目录
+```text
+data/runtime_state.json
+```
+
+用于记录：
+
+- 上一次成功运行时间
+- 上一次邮件发送时间
+- 上一次新论文数量
+- 上一次候选论文数量
+- 上一次实际检索窗口
+
+它与 `sent_ids.json` 的作用不同：
+
+```text
+sent_ids.json
+    ↓
+判断论文以前是否已经推送
+
+runtime_state.json
+    ↓
+判断上一次成功运行是什么时候，从而计算本次检索窗口
+```
+
+### HTML 邮件
+
+邮件包含：
+
+- 论文标题
+- 作者
+- 出版物
+- 发表日期
+- 影响因子（如已配置）
+- 来源数据库
+- 摘要
+- DOI
+- 原文链接
+- 本次实际运行时间
+- 上次成功运行时间
+- 实际检索时间范围
+- 实际检索窗口
+- 数据库候选论文数量
+- 历史重复论文数量
+- 本次新论文数量
+
+### 邮箱
+
+支持配置：
+
+- QQ 邮箱
+- 163 邮箱
+- Gmail
+- 其他支持标准 SMTP / SSL / STARTTLS 的邮箱
+
+### 云端执行
+
+使用 GitHub Actions：
+
+- 每天北京时间约 08:15 自动运行
+- 支持手动 `workflow_dispatch`
+- GitHub Secrets 管理邮箱密码和 API Key
+- 自动将去重和运行状态提交回仓库
+- 无需本地服务器
+
+---
+
+## 2. 项目结构
 
 ```text
 academic_paper_daily/
@@ -39,75 +115,228 @@ academic_paper_daily/
 ├── config.yaml
 ├── impact_factors.yaml
 ├── requirements.txt
+├── README.md
 ├── .env.example
 ├── .gitignore
-├── README.md
 ├── data/
-│   └── sent_ids.json
+│   ├── sent_ids.json
+│   └── runtime_state.json
 └── .github/
     └── workflows/
         └── daily_paper.yml
 ```
 
-## 1. 本地测试
+### 文件作用
 
-建议 Python 3.11+。
+| 文件 | 作用 |
+|---|---|
+| `main.py` | 主程序：检索、布尔匹配、合并、去重、邮件、运行状态 |
+| `config.yaml` | 关键词、数据库、邮箱及运行参数 |
+| `impact_factors.yaml` | 可选的期刊 JCR 影响因子人工映射 |
+| `requirements.txt` | Python 依赖 |
+| `data/sent_ids.json` | 已推送论文 ID 持久化记录 |
+| `data/runtime_state.json` | 上一次成功运行状态 |
+| `.github/workflows/daily_paper.yml` | GitHub Actions 自动任务 |
+| `.env.example` | 本地环境变量示例 |
 
-```bash
-python -m venv .venv
-```
+---
 
-Windows：
-
-```powershell
-.venv\Scripts\activate
-```
-
-macOS/Linux：
-
-```bash
-source .venv/bin/activate
-```
-
-安装：
-
-```bash
-pip install -r requirements.txt
-```
+## 3. 配置关键词
 
 编辑 `config.yaml`：
 
-- `search.queries`：关键词/布尔检索式
-- `search.hours`：滚动时间范围，默认 24
-- `sources.*.enabled`：启停数据库
-- `email`：SMTP 主机、端口和收件人
-- `impact_factors.yaml`：可选的 JCR IF 映射
+```yaml
+search:
+  hours: 24
+  delay_tolerance_hours: 12
+  max_hours: 48
 
-本地运行前设置 SMTP 密码：
-
-PowerShell：
-
-```powershell
-$env:SMTP_PASSWORD="你的SMTP授权码或应用专用密码"
-$env:SMTP_USERNAME="你的邮箱"
-$env:MAIL_FROM="你的邮箱"
-$env:MAIL_TO="收件邮箱"
-python main.py
+  queries:
+    - '"amorphous alloy" AND ("machine learning" OR "data-driven")'
+    - '"metallic glass" AND ("machine learning" OR "data-driven")'
+    - '"amorphous alloy" AND "artificial intelligence"'
 ```
 
-macOS/Linux：
+### 布尔逻辑
 
-```bash
-export SMTP_PASSWORD='你的SMTP授权码或应用专用密码'
-export SMTP_USERNAME='你的邮箱'
-export MAIL_FROM='你的邮箱'
-export MAIL_TO='收件邮箱'
-python main.py
+支持：
+
+```text
+AND
+OR
+NOT
+()
+```
+
+例如：
+
+```text
+("LiFePO4" OR "LFP") AND leaching AND NOT graphite
+```
+
+表示：
+
+```text
+LiFePO4 或 LFP
+        ↓
+必须包含 leaching
+        ↓
+不能包含 graphite
+```
+
+多个 `queries` 之间按 OR 处理，一篇论文只要匹配任意一个检索式即可进入最终结果。
+
+---
+
+## 4. 自适应检索窗口
+
+这是 V1.1 相比初版最重要的改进之一。
+
+### 传统方式
+
+如果固定：
+
+```yaml
+hours: 24
+```
+
+程序永远只查询当前时间往前 24 小时。
+
+但是 GitHub Actions 的 scheduled workflow 并不保证严格按照设定分钟执行，可能因为平台负载而延迟。
+
+例如：
+
+```text
+计划运行：08:15
+实际运行：11:50
+```
+
+如果仍然只查固定 24 小时，就可能缩短实际覆盖区间。
+
+### V1.1 的处理方式
+
+程序读取：
+
+```text
+data/runtime_state.json
+```
+
+计算：
+
+```text
+本次运行时间 - 上次成功运行时间
+```
+
+然后动态确定检索窗口。
+
+例如：
+
+```text
+上次成功运行：08:16
+本次运行：11:50
+实际间隔：27小时34分钟
+```
+
+程序会根据：
+
+```yaml
+hours: 24
+delay_tolerance_hours: 12
+max_hours: 48
+```
+
+自动扩大本次搜索窗口，同时将最大搜索窗口限制在 48 小时。
+
+这样可以降低 GitHub Actions 延迟导致漏检的风险。
+
+### 参数说明
+
+```yaml
+search:
+  hours: 24
+  delay_tolerance_hours: 12
+  max_hours: 48
+```
+
+含义：
+
+- `hours`：正常情况下的最低检索窗口
+- `delay_tolerance_hours`：发生调度延迟时附加的安全缓冲
+- `max_hours`：检索窗口上限
+
+建议初始保持：
+
+```yaml
+hours: 24
+delay_tolerance_hours: 12
+max_hours: 48
+```
+
+---
+
+## 5. 时间与 GitHub Actions
+
+当前工作流使用：
+
+```yaml
+on:
+  schedule:
+    - cron: "15 8 * * *"
+      timezone: "Asia/Shanghai"
+  workflow_dispatch:
+```
+
+即：
+
+```text
+Asia/Shanghai
+每天 08:15
+```
+
+选择 08:15 而不是 08:00，是为了避开整点调度高峰，降低 scheduled workflow 延迟概率。
+
+### 注意
+
+GitHub Actions 的 `schedule` 仍然不是精确到秒的实时定时器。即使设置为 08:15，也不能保证每一天都严格在 08:15:00 开始执行。
+
+因此本项目将：
+
+```text
+非精确定时
++
+runtime_state.json
++
+自适应检索窗口
++
+论文 ID 去重
+```
+
+结合起来，提升系统可靠性。
+
+---
+
+## 6. 邮箱配置
+
+编辑 `config.yaml`：
+
+```yaml
+email:
+  smtp_host: "smtp.qq.com"
+  smtp_port: 465
+  security: "ssl"
+
+  username: "your_email@example.com"
+  from: "your_email@example.com"
+  from_name: "每日学术文献推送"
+
+  to:
+    - "recipient@example.com"
+
+  subject_prefix: "每日学术文献推送"
+  send_when_empty: true
 ```
 
 ### QQ 邮箱
-
-典型配置：
 
 ```yaml
 smtp_host: "smtp.qq.com"
@@ -115,7 +344,7 @@ smtp_port: 465
 security: "ssl"
 ```
 
-`SMTP_PASSWORD` 应填写 SMTP 授权码，而不是网页登录密码。
+`SMTP_PASSWORD` 使用 QQ 邮箱 SMTP 授权码，不要使用 QQ 登录密码。
 
 ### 163 邮箱
 
@@ -125,8 +354,6 @@ smtp_port: 465
 security: "ssl"
 ```
 
-同样建议使用 SMTP 授权码。
-
 ### Gmail
 
 ```yaml
@@ -135,84 +362,89 @@ smtp_port: 465
 security: "ssl"
 ```
 
-对于 Gmail，优先使用应用专用密码，不要把账户主密码写入代码。
+建议 Gmail 使用应用专用密码。
 
-## 2. 关键词和布尔检索
+---
 
-示例：
+## 7. 本地安装与测试
 
-```yaml
-queries:
-  - '"amorphous alloy" AND ("machine learning" OR "data-driven")'
-  - '("metal additive manufacturing" OR "3D printing") AND recycling'
-  - '("LiFePO4" OR "LFP") AND leaching AND NOT graphite'
+推荐 Python 3.11+，GitHub Actions 当前使用 Python 3.12。
+
+### 创建虚拟环境
+
+Windows：
+
+```powershell
+python -m venv .venv
+.venv\Scripts\activate
 ```
 
-多条 `queries` 在最终结果中按 OR 关系处理；一篇文献只要匹配其中任意一个表达式即可。
+macOS/Linux：
 
-检索字段：
-
-- PubMed：将表达式交给 PubMed E-utilities。
-- arXiv：转换为 arXiv API 搜索表达式，并再次在标题+摘要本地执行布尔判断。
-- OpenAlex：先用关键词做候选发现，再在标题+摘要本地执行完整布尔判断。
-
-这样可以尽可能让三套数据库的结果行为一致。
-
-## 3. 时间范围
-
-默认：
-
-```yaml
-search:
-  hours: 24
+```bash
+python -m venv .venv
+source .venv/bin/activate
 ```
 
-表示每次运行都检索“当前时间向前 24 小时”。
+### 安装依赖
 
-也支持固定时间：
-
-```yaml
-search:
-  start: "2026-09-10T00:00:00+00:00"
-  end: "2026-09-11T00:00:00+00:00"
+```bash
+pip install -r requirements.txt
 ```
 
-## 4. 去重
+### 设置 SMTP 环境变量
 
-系统优先使用：
+PowerShell：
 
-1. DOI
-2. PMID
-3. arXiv ID
-4. 数据库内部 UID
+```powershell
+$env:SMTP_HOST="smtp.qq.com"
+$env:SMTP_PORT="465"
+$env:SMTP_USERNAME="你的邮箱"
+$env:SMTP_PASSWORD="你的SMTP授权码"
+$env:MAIL_FROM="你的邮箱"
+$env:MAIL_TO="收件邮箱"
+```
 
-去重文件：
+运行：
+
+```powershell
+python main.py
+```
+
+正常情况下会看到：
 
 ```text
-data/sent_ids.json
+PubMed returned ... candidates
+arXiv returned ... candidates
+OpenAlex returned ... candidates
+Total=...
+Email sent successfully.
+Persistent sent-ID store updated
+Runtime state updated
 ```
 
-### 为什么 GitHub Actions 还需要提交这个文件？
-
-GitHub Actions runner 是临时环境。如果仅在 runner 本地保存，下一天任务启动后文件会消失。
-
-所以工作流最后会：
+首次运行后检查：
 
 ```text
-git add data/sent_ids.json
-git commit
-git push
+data/
+├── sent_ids.json
+└── runtime_state.json
 ```
 
-将状态写回默认分支，从而实现跨运行持久化。
+---
 
-因此仓库必须允许 GitHub Actions 写入 Contents。
-
-## 5. GitHub Secrets
+## 8. GitHub Secrets
 
 进入：
 
-`GitHub 仓库 → Settings → Secrets and variables → Actions`
+```text
+GitHub
+→ Repository
+→ Settings
+→ Secrets and variables
+→ Actions
+→ New repository secret
+```
 
 添加：
 
@@ -234,98 +466,352 @@ OPENALEX_API_KEY
 OPENALEX_MAILTO
 ```
 
-建议：
+不要把 SMTP 授权码、账号密码、API Key 写入仓库。
 
-- `SMTP_PASSWORD`：QQ/163 SMTP 授权码或 Gmail 应用专用密码
-- `MAIL_TO`：多个收件人用英文逗号分隔
-- 不要把密码直接写进 `config.yaml`
+---
 
-## 6. GitHub Actions
+## 9. GitHub Actions 部署
 
-工作流：
+工作流文件：
 
 ```text
 .github/workflows/daily_paper.yml
 ```
 
-包含：
+核心调度配置：
 
 ```yaml
-schedule:
-  - cron: "0 0 * * *"
-workflow_dispatch:
+on:
+  schedule:
+    - cron: "15 8 * * *"
+      timezone: "Asia/Shanghai"
+  workflow_dispatch:
 ```
 
-`0 0 * * *` 是 UTC 00:00，对应北京时间 08:00。
-
-同时可以在 GitHub：
-
-`Actions → Daily Academic Paper Search → Run workflow`
-
-手动测试。
-
-GitHub 官方文档说明，scheduled workflow 默认使用 UTC；高负载时刻可能发生延迟，因此实际运行时间不保证精确到秒。
-
-## 7. 推荐首次部署顺序
-
-1. 本地创建项目并复制这些文件。
-2. 修改 `config.yaml` 中的邮箱、关键词。
-3. 配置 SMTP 密码环境变量。
-4. 本地运行 `python main.py`。
-5. 确认收到 HTML 邮件。
-6. 检查 `data/sent_ids.json` 是否产生记录。
-7. 建立 GitHub 仓库并 push 全部文件。
-8. 添加 GitHub Secrets。
-9. 确认 Actions workflow 具有 `Read and write permissions`。
-10. 手动 Run workflow。
-11. 确认邮件收到且 `data/sent_ids.json` 自动提交更新。
-12. 等待每日 UTC 00:00 自动运行。
-
-## 8. 常见问题
-
-### 没有邮件
-
-先检查：
-
-- SMTP 主机/端口
-- SMTP 授权码/应用专用密码
-- `MAIL_FROM`
-- `MAIL_TO`
-- 邮箱是否开启 SMTP/第三方客户端服务
-
-### GitHub Actions 能发邮件，但 sent_ids 没有提交
+### 手动测试
 
 进入：
 
-`Settings → Actions → General → Workflow permissions`
+```text
+GitHub
+→ Actions
+→ Daily Academic Paper Search
+→ Run workflow
+```
 
-选择允许工作流写入仓库内容。
+建议首次部署完成后先手动运行一次。
 
-本工作流也显式声明：
+### 运行流程
+
+```text
+Checkout repository
+        ↓
+安装 Python 3.12
+        ↓
+安装 requirements.txt
+        ↓
+运行 main.py
+        ↓
+读取 sent_ids.json
+        ↓
+读取 runtime_state.json
+        ↓
+动态确定检索窗口
+        ↓
+PubMed / arXiv / OpenAlex
+        ↓
+合并 + 布尔筛选
+        ↓
+历史去重
+        ↓
+HTML 邮件
+        ↓
+QQ / 163 / Gmail SMTP
+        ↓
+更新 sent_ids.json
+        ↓
+更新 runtime_state.json
+        ↓
+GitHub commit + push
+```
+
+---
+
+## 10. GitHub Actions 为什么需要写回状态文件？
+
+GitHub Actions runner 是临时环境。
+
+如果只在 runner 中修改：
+
+```text
+sent_ids.json
+runtime_state.json
+```
+
+下一次任务启动时这些变化可能不会保留。
+
+因此 workflow 会执行：
+
+```bash
+git add data/sent_ids.json
+git add data/runtime_state.json
+git commit -m "chore: update paper search state"
+git push
+```
+
+从而把状态持久化到仓库。
+
+因此 workflow 使用：
 
 ```yaml
 permissions:
   contents: write
 ```
 
-### 为什么影响因子显示“未配置”
+仓库的 Actions Workflow permissions 也必须允许写入内容。
 
-因为这不是公开数据库 API 稳定提供的字段。本项目不把其它引用指标冒充 JCR Impact Factor。
+---
 
-### API 临时失败怎么办
+## 11. 影响因子说明
 
-每个 HTTP 请求默认最多自动重试 3 次，并记录失败日志；单个数据库失败不会阻止另外两个数据库继续检索。
+PubMed、arXiv 和 OpenAlex 的公开 API 并不等同于 Clarivate JCR 数据源。
 
-## 9. 后续可扩展
+因此本项目不会把 CiteScore、OpenAlex 指标或其他指标冒充为 JCR Journal Impact Factor。
 
-目前核心结构已经把“数据库适配器”“去重”“指标映射”“邮件发送”“工作流”分离，后续可以继续增加：
+项目提供：
 
-- Semantic Scholar
-- Crossref
-- Europe PMC
-- Web of Science / Scopus（在具有合法 API 权限时）
-- 论文关键词高亮
-- 相关性评分
-- 中英文摘要
-- 每日 Markdown / Excel 附件
-- Telegram / 企业微信 / 飞书推送
+```text
+impact_factors.yaml
+```
+
+可以手动维护：
+
+```yaml
+"Advanced Materials": "29.4"
+"Acta Materialia": "9.7"
+```
+
+邮件会显示匹配值；没有配置时显示：
+
+```text
+未配置
+```
+
+---
+
+## 12. 常见问题
+
+### Q1：为什么明明设置 08:15，邮件却晚几个小时？
+
+GitHub Actions scheduled workflow 可能受到平台调度负载影响，实际开始时间不一定等于计划时间。
+
+本项目通过：
+
+```text
+08:15 非整点调度
++
+runtime_state.json
++
+自适应搜索窗口
+```
+
+降低这种问题对文献覆盖范围的影响。
+
+### Q2：为什么没有新论文也会收到邮件？
+
+如果：
+
+```yaml
+send_when_empty: true
+```
+
+系统会发送一封“本次没有新的符合条件论文”的日报，同时更新运行状态。
+
+如果不希望无新论文时发送邮件：
+
+```yaml
+send_when_empty: false
+```
+
+### Q3：为什么同一篇论文不会重复推送？
+
+系统优先使用：
+
+```text
+DOI → PMID → arXiv ID → UID
+```
+
+并将已推送 ID 写入：
+
+```text
+data/sent_ids.json
+```
+
+### Q4：`runtime_state.json` 和 `sent_ids.json` 有什么区别？
+
+```text
+sent_ids.json
+    = 论文是否已经推送过
+
+runtime_state.json
+    = 上一次成功运行是什么时候
+```
+
+前者负责去重，后者负责计算下一次的检索时间窗口。
+
+### Q5：数据库临时失败怎么办？
+
+每个 HTTP 请求默认最多自动重试 3 次。
+
+如果一个数据库最终失败，程序记录异常并继续执行其他数据库，不会因为单一数据库故障直接中断整封日报。
+
+### Q6：如何修改运行时间？
+
+修改 `.github/workflows/daily_paper.yml` 的：
+
+```yaml
+schedule:
+  - cron: "15 8 * * *"
+    timezone: "Asia/Shanghai"
+```
+
+例如每天北京时间 07:30：
+
+```yaml
+schedule:
+  - cron: "30 7 * * *"
+    timezone: "Asia/Shanghai"
+```
+
+建议尽量选择非整点时间。
+
+---
+
+## 13. 当前版本状态
+
+### V1.0
+
+- PubMed
+- arXiv
+- OpenAlex
+- 布尔检索
+- 24 小时检索
+- DOI/PMID/arXiv 去重
+- HTML 邮件
+- SMTP
+- GitHub Actions
+- GitHub Secrets
+
+### V1.1
+
+在 V1.0 基础上增加：
+
+- `runtime_state.json`
+- 自适应检索时间窗口
+- 调度延迟容错
+- 最大检索窗口限制
+- 邮件显示实际运行状态
+- 无新论文时仍可更新运行状态
+- GitHub Actions 使用 `Asia/Shanghai` 时区
+- 计划时间调整为北京时间 08:15
+
+---
+
+## 14. 下一阶段计划
+
+当前系统已经可以作为稳定运行的个人科研文献日报使用。
+
+后续可继续增加：
+
+### V1.2：论文相关性评分
+
+```text
+标题命中
+摘要命中
+关键词数量
+主题匹配
+期刊权重
+        ↓
+相关性评分
+        ↓
+TOP 10 重点论文
+```
+
+### V1.3：论文主题分类
+
+例如：
+
+```text
+非晶合金
+数据驱动
+机器学习
+增材制造
+电池回收
+冶金过程
+```
+
+### V1.4：AI 论文解读
+
+自动生成：
+
+```text
+研究问题
+研究方法
+主要结论
+创新点
+局限性
+与你当前研究方向的相关性
+```
+
+最终可以逐步发展为个人化的科研文献情报系统。
+
+---
+
+## 15. 推荐部署流程
+
+```text
+修改 config.yaml
+        ↓
+本地 python main.py 测试
+        ↓
+确认 QQ 邮件正常
+        ↓
+检查 sent_ids.json
+        ↓
+检查 runtime_state.json
+        ↓
+Push 到 GitHub
+        ↓
+配置 GitHub Secrets
+        ↓
+Actions 手动运行
+        ↓
+确认邮件到达
+        ↓
+确认两个状态文件自动提交
+        ↓
+每天自动运行
+```
+
+---
+
+## 16. 安全提醒
+
+不要提交以下信息：
+
+```text
+SMTP_PASSWORD
+邮箱登录密码
+SMTP 授权码
+NCBI_API_KEY
+OPENALEX_API_KEY
+其他第三方 API 密钥
+```
+
+推荐全部使用 GitHub Secrets 或本地环境变量。
+
+---
+
+## License / Usage
+
+本项目主要用于个人科研信息检索与自动化学习工作流。使用第三方数据库时，应遵守相应 API 的使用条款、频率限制和数据许可要求。
