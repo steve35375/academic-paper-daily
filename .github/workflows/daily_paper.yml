@@ -51,6 +51,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/sent_ids.json
+          git add data/runtime_state.json
           if git diff --cached --quiet; then
             echo "No state changes to commit."
           else
